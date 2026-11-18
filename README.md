@@ -2,6 +2,8 @@
 
 Live demo: https://print-quote-agent.vercel.app
 
+[![Print quote agent: itemized offset vs digital quote with recommendation](docs/screenshots/demo.png)](https://print-quote-agent.vercel.app)
+
 A conversational agent that turns "5k tri-fold brochures, 4/4, 100# gloss, need by Friday" into a structured spec, asks for whatever is missing, prices the job with a deterministic cost engine, and recommends **offset or digital** with an itemized quote and plain-English reasoning.
 
 **The point of the repo: the LLM orchestrates and extracts. It never does arithmetic.** Every dollar amount comes from a tool call into plain Python, and a guardrail blocks any answer containing a number the tools did not produce.
