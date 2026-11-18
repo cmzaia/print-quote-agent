@@ -145,13 +145,20 @@ class QuoteAgent:
     def new_session(self) -> str:
         return uuid.uuid4().hex[:12]
 
-    def chat(self, session_id: str, message: str) -> dict:
+    def chat(self, session_id: str, message: str, state: dict | None = None) -> dict:
+        """One turn. With `state` (as returned by a previous turn) the conversation is carried
+        by the client, so no server memory is needed; otherwise the session id keys a
+        server-side checkpoint thread."""
         t0 = time.perf_counter()
         today = (self.today or date.today()).isoformat()
-        out = self.graph.invoke(
-            {"user_input": message, "today": today},
-            config={"configurable": {"thread_id": session_id}},
-        )
+        payload: dict[str, Any] = {"user_input": message, "today": today}
+        thread = session_id
+        if state is not None:
+            payload["raw"] = state.get("raw") or {}
+            payload["awaiting"] = state.get("awaiting") or []
+            payload["known"] = state.get("known") or {}
+            thread = uuid.uuid4().hex  # fresh thread: the client's state is authoritative
+        out = self.graph.invoke(payload, config={"configurable": {"thread_id": thread}})
         return {
             "session_id": session_id,
             "reply": out["reply"],
@@ -159,6 +166,12 @@ class QuoteAgent:
             "awaiting": out.get("awaiting", []),
             "known": out.get("known", {}),
             "quote": out.get("quote") if out["status"] == "quoted" else None,
+            "crossover": (out.get("facts") or {}).get("crossover") if out["status"] == "quoted" else None,
+            "state": {
+                "raw": out.get("raw", {}),
+                "awaiting": out.get("awaiting", []),
+                "known": out.get("known", {}),
+            },
             "guard": out.get("guard", {}),
             "latency_ms": round((time.perf_counter() - t0) * 1000, 2),
         }

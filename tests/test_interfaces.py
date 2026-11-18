@@ -68,3 +68,13 @@ def test_provider_selection(monkeypatch):
     with pytest.raises(ValueError):
         get_provider("nope")
     assert os.environ["LLM_PROVIDER"] == "fake"
+
+
+def test_chat_is_stateless_when_client_sends_state():
+    r1 = client.post("/chat", json={"message": "2000 flyers", "today": "2026-11-16"}).json()
+    assert r1["status"] == "needs_info" and r1["state"]["raw"]
+    r2 = client.post(
+        "/chat", json={"message": "4/4 100# gloss text", "state": r1["state"]}
+    ).json()  # no session id: state travels with the request
+    assert r2["status"] == "quoted"
+    assert r2["crossover"] is not None and r2["quote"]["offset"]["lines"]

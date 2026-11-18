@@ -4,41 +4,178 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Print quote agent</title>
+<meta name="description" content="An LLM extracts the spec and asks questions; a deterministic cost engine does all the math.">
 <style>
-  :root { --bg:#f6f7f9; --fg:#1b1f24; --card:#fff; --me:#1f6feb; --line:#d8dde3; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0f1318; --fg:#e6e9ed; --card:#1a2028; --line:#2c343d; } }
-  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
-  main { max-width:760px; margin:0 auto; padding:16px; display:flex; flex-direction:column; height:100vh; box-sizing:border-box; }
-  h1 { font-size:18px; margin:0 0 4px; } p.sub { margin:0 0 12px; opacity:.7; font-size:13px; }
-  #log { flex:1; overflow:auto; display:flex; flex-direction:column; gap:10px; padding-bottom:8px; }
-  .msg { padding:10px 12px; border-radius:10px; max-width:92%; white-space:pre-wrap; background:var(--card); border:1px solid var(--line); font-family:inherit; }
-  .me { align-self:flex-end; background:var(--me); color:#fff; border-color:var(--me); }
-  .bot { font-family: ui-monospace, Menlo, monospace; font-size:13px; }
-  form { display:flex; gap:8px; margin-top:8px; }
-  input { flex:1; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); font-size:15px; }
-  button { padding:10px 16px; border:0; border-radius:8px; background:var(--me); color:#fff; font-size:15px; cursor:pointer; }
+  :root {
+    --bg:#f5f6f8; --fg:#16191d; --muted:#5d6672; --card:#fff; --line:#dfe3e8;
+    --accent:#1f5fd6; --accent-fg:#fff; --good:#0f7a4a; --good-bg:#e6f5ed; --soft:#eef2f8;
+    --shadow:0 1px 2px rgba(16,24,40,.06), 0 4px 16px rgba(16,24,40,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1217; --fg:#e8ebef; --muted:#97a1ad; --card:#171d25; --line:#2a323c;
+      --accent:#5b93f5; --accent-fg:#0b1220; --good:#4cd08c; --good-bg:#12291f; --soft:#1d2530; --shadow:none; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:920px; margin:0 auto; padding:20px 16px 40px; }
+  header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:6px; }
+  h1 { font-size:22px; letter-spacing:-.01em; margin:0; }
+  .gh { color:var(--fg); text-decoration:none; border:1px solid var(--line); background:var(--card); padding:6px 12px; border-radius:8px; font-size:13px; white-space:nowrap; }
+  .gh:hover { border-color:var(--accent); color:var(--accent); }
+  .lede { color:var(--muted); margin:4px 0 18px; max-width:62ch; }
+  .lede b { color:var(--fg); font-weight:600; }
+  .layout { display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:16px; align-items:start; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); }
+  .chat { padding:14px; }
+  #log { display:flex; flex-direction:column; gap:10px; max-height:640px; overflow:auto; padding:2px; }
+  .msg { padding:9px 12px; border-radius:12px; max-width:92%; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .me { align-self:flex-end; background:var(--accent); color:var(--accent-fg); }
+  .bot { align-self:flex-start; background:var(--soft); }
+  .examples { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 4px; }
+  .ex { font:inherit; font-size:13px; text-align:left; padding:7px 11px; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:999px; cursor:pointer; }
+  .ex:hover { border-color:var(--accent); color:var(--accent); }
+  .label { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:14px 0 0; }
+  form { display:flex; gap:8px; margin-top:12px; }
+  input { flex:1; min-width:0; padding:11px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); font:inherit; }
+  input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  button.send { padding:0 18px; border:0; border-radius:10px; background:var(--accent); color:var(--accent-fg); font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  aside { padding:14px 16px; font-size:13px; }
+  aside h2 { font-size:14px; margin:0 0 8px; }
+  aside ol { margin:0; padding-left:18px; color:var(--muted); }
+  aside li { margin-bottom:8px; } aside li b { color:var(--fg); font-weight:600; }
+  aside p { color:var(--muted); margin:8px 0 0; }
+  /* quote card */
+  .card { align-self:stretch; border:1px solid var(--line); border-radius:12px; background:var(--card); overflow:hidden; max-width:100%; }
+  .card-head { padding:12px 14px; border-bottom:1px solid var(--line); }
+  .card-head .t { font-weight:600; } .card-head .s { color:var(--muted); font-size:13px; }
+  .rec { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; font-size:14px; }
+  .pill { background:var(--good-bg); color:var(--good); font-weight:600; font-size:12px; padding:3px 9px; border-radius:999px; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; }
+  .col { padding:12px 14px; min-width:0; }
+  .col + .col { border-left:1px solid var(--line); }
+  .col.win { background:var(--good-bg); }
+  .col h3 { margin:0; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); display:flex; justify-content:space-between; gap:6px; }
+  .col.win h3 .pill { background:var(--good); color:var(--card); }
+  .total { font-size:26px; font-weight:700; letter-spacing:-.02em; margin:2px 0 0; font-variant-numeric:tabular-nums; }
+  .unit { color:var(--muted); font-size:12px; margin-bottom:8px; }
+  .row { display:flex; justify-content:space-between; gap:10px; font-size:13px; padding:3px 0; border-top:1px dashed var(--line); font-variant-numeric:tabular-nums; }
+  .row span:first-child { color:var(--muted); min-width:0; overflow-wrap:anywhere; }
+  .na { color:var(--muted); font-size:13px; margin-top:8px; }
+  .foot { padding:10px 14px; border-top:1px solid var(--line); font-size:13px; color:var(--muted); background:var(--soft); }
+  .foot b { color:var(--fg); }
+  .why { padding:10px 14px; border-top:1px solid var(--line); font-size:14px; }
+  .notes { color:var(--muted); font-size:12px; padding:0 14px 10px; }
+  @media (max-width:720px) {
+    .layout { grid-template-columns:1fr; } aside { order:2; }
+    .cols { grid-template-columns:1fr; } .col + .col { border-left:0; border-top:1px solid var(--line); }
+    #log { max-height:none; } h1 { font-size:19px; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <h1>Print quote agent</h1>
-  <p class="sub">Try: "5k tri-fold brochures, 4/4, 100# gloss, need by Friday". Every number comes from the cost engine.</p>
-  <div id="log" aria-live="polite"></div>
-  <form id="f"><input id="m" autocomplete="off" placeholder="Describe your print job" autofocus><button>Send</button></form>
-</main>
+<div class="wrap">
+  <header>
+    <h1>Print quote agent</h1>
+    <a class="gh" href="https://github.com/cmzaia/print-quote-agent" target="_blank" rel="noopener">GitHub</a>
+  </header>
+  <p class="lede">The LLM extracts the spec and asks questions; <b>a deterministic cost engine does all the math</b>. Describe a print job and get an itemized offset vs digital comparison with a recommendation.</p>
+
+  <div class="layout">
+    <section class="panel chat">
+      <div id="log" aria-live="polite"></div>
+      <p class="label">Try an example</p>
+      <div class="examples" id="examples"></div>
+      <form id="f"><input id="m" autocomplete="off" placeholder="Describe your print job" aria-label="Describe your print job"><button class="send" id="go">Send</button></form>
+    </section>
+    <aside class="panel">
+      <h2>How it works</h2>
+      <ol>
+        <li><b>Extract.</b> The model pulls raw phrases out of your message.</li>
+        <li><b>Normalize.</b> Plain code maps them to a validated spec and decides what is missing.</li>
+        <li><b>Price.</b> The cost engine computes imposition, plates, clicks, finishing and rush in integer cents.</li>
+        <li><b>Verify.</b> A guardrail rejects any number the engine did not produce.</li>
+      </ol>
+      <p>Demo runs with a rule-based stand-in for the model, no API key. Rates are fictional.</p>
+    </aside>
+  </div>
+</div>
 <script>
-  const log = document.getElementById('log'), f = document.getElementById('f'), m = document.getElementById('m');
-  let sid = null;
-  function add(text, cls) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; }
-  f.addEventListener('submit', async (e) => {
-    e.preventDefault(); const text = m.value.trim(); if (!text) return;
-    add(text, 'me'); m.value = '';
+  const EXAMPLES = [
+    '5000 tri-fold brochures, 4/4, 100# gloss text, need in 5 business days',
+    '250 postcards 4/4 100# gloss cover, rush: 2 business days',
+    '20,000 flyers, 8.5x11, full color both sides, 80# gloss text',
+    '500 flyers'
+  ];
+  const log = document.getElementById('log'), f = document.getElementById('f'), m = document.getElementById('m'), go = document.getElementById('go');
+  let state = null;
+  const money = (x) => '$' + Number(x).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  function scroll() { log.scrollTop = log.scrollHeight; }
+  function add(text, cls) { log.appendChild(el('div', 'msg ' + cls, text)); scroll(); }
+
+  function col(name, q, win) {
+    const c = el('div', 'col' + (win ? ' win' : ''));
+    const h = el('h3', '', name); if (win) h.appendChild(el('span', 'pill', 'Recommended'));
+    c.appendChild(h);
+    if (q.total == null) { c.appendChild(el('div', 'na', 'Not possible. ' + (q.infeasible_reason || ''))); return c; }
+    c.appendChild(el('div', 'total', money(q.total)));
+    c.appendChild(el('div', 'unit', '$' + Number(q.unit_price).toFixed(3) + ' each' + (q.feasible ? '' : ' (unavailable)')));
+    q.lines.forEach((l) => { const r = el('div', 'row'); r.append(el('span', '', l.label), el('span', '', money(l.amount))); c.appendChild(r); });
+    if (!q.feasible) c.appendChild(el('div', 'na', q.infeasible_reason || 'Cannot meet the deadline.'));
+    return c;
+  }
+
+  function quoteCard(j) {
+    const q = j.quote, rec = q.recommended, card = el('div', 'card');
+    const head = el('div', 'card-head');
+    head.appendChild(el('div', 't', 'Offset vs digital'));
+    const r = el('div', 'rec');
+    if (rec) {
+      r.appendChild(el('span', 'pill', 'Recommended: ' + rec));
+      if (q.savings != null) r.appendChild(el('span', '', 'saves ' + money(q.savings) + (q.savings_pct != null ? ' (' + q.savings_pct + '%)' : '')));
+    } else r.appendChild(el('span', '', 'Neither method can meet the deadline. Fastest: ' + q.earliest_business_days + ' business day(s).'));
+    head.appendChild(r); card.appendChild(head);
+    const cols = el('div', 'cols');
+    cols.append(col('Offset', q.offset, rec === 'offset'), col('Digital', q.digital, rec === 'digital'));
+    card.appendChild(cols);
+    const x = j.crossover;
+    if (x) {
+      const foot = el('div', 'foot');
+      if (x.crossover_quantity) foot.innerHTML = 'Crossover quantity: <b></b> pieces. Below that digital is cheaper, above it offset wins (standard turnaround).';
+      else foot.textContent = 'Digital stays cheaper at every quantity quoted for this spec.';
+      const b = foot.querySelector('b'); if (b) b.textContent = x.crossover_quantity.toLocaleString('en-US');
+      card.appendChild(foot);
+    }
+    return card;
+  }
+
+  function showReply(j) {
+    if (j.status === 'quoted' && j.quote) {
+      const s = j.quote.spec;
+      // The reasoning paragraph is the third block of the reply text (after the heading line).
+      const why = (j.reply.split('\n\n')[1] || '').trim();
+      log.appendChild(el('div', 'msg bot', 'Quote for ' + s.quantity.toLocaleString('en-US') + ' x ' + s.product.replace('_', ' ') + ', ' + s.size + ' in, ' + s.colors + ', ' + s.paper.replace(/_/g, ' ')));
+      log.appendChild(quoteCard(j));
+      if (why) log.appendChild(el('div', 'msg bot', why));
+      scroll();
+    } else add(j.reply, 'bot');
+  }
+
+  async function send(text) {
+    text = text.trim(); if (!text) return;
+    add(text, 'me'); m.value = ''; go.disabled = true;
     try {
-      const r = await fetch('/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ message: text, session_id: sid }) });
-      const j = await r.json(); sid = j.session_id; add(j.reply, 'bot');
-    } catch (err) { add('Request failed: ' + err, 'bot'); }
-  });
-  add('Hi! Describe what you want printed and when you need it.', 'bot');
+      const r = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, state }) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json(); state = j.state; showReply(j);
+    } catch (err) { add('Request failed: ' + err.message, 'bot'); }
+    go.disabled = false;
+  }
+  f.addEventListener('submit', (e) => { e.preventDefault(); send(m.value); });
+  const ex = document.getElementById('examples');
+  EXAMPLES.forEach((t) => { const b = el('button', 'ex', t); b.type = 'button'; b.onclick = () => send(t); ex.appendChild(b); });
+  add('Hi! Describe what you want printed and when you need it, or pick an example below.', 'bot');
 </script>
 </body>
 </html>

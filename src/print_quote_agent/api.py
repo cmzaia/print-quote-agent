@@ -27,6 +27,7 @@ class ChatIn(BaseModel):
     message: str
     session_id: str | None = None
     today: date | None = None  # for reproducible demos
+    state: dict | None = None  # conversation state echoed by the previous reply (stateless hosting)
 
 
 @app.get("/health")
@@ -40,7 +41,7 @@ def chat(body: ChatIn) -> dict:
     sid = body.session_id or agent.new_session()
     if body.today:
         agent.today = body.today
-    return agent.chat(sid, body.message)
+    return agent.chat(sid, body.message, body.state)
 
 
 @app.post("/quote")
