@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Print quote agent</title>
+<style>
+  :root { --bg:#f6f7f9; --fg:#1b1f24; --card:#fff; --me:#1f6feb; --line:#d8dde3; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1318; --fg:#e6e9ed; --card:#1a2028; --line:#2c343d; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:16px; display:flex; flex-direction:column; height:100vh; box-sizing:border-box; }
+  h1 { font-size:18px; margin:0 0 4px; } p.sub { margin:0 0 12px; opacity:.7; font-size:13px; }
+  #log { flex:1; overflow:auto; display:flex; flex-direction:column; gap:10px; padding-bottom:8px; }
+  .msg { padding:10px 12px; border-radius:10px; max-width:92%; white-space:pre-wrap; background:var(--card); border:1px solid var(--line); font-family:inherit; }
+  .me { align-self:flex-end; background:var(--me); color:#fff; border-color:var(--me); }
+  .bot { font-family: ui-monospace, Menlo, monospace; font-size:13px; }
+  form { display:flex; gap:8px; margin-top:8px; }
+  input { flex:1; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); font-size:15px; }
+  button { padding:10px 16px; border:0; border-radius:8px; background:var(--me); color:#fff; font-size:15px; cursor:pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Print quote agent</h1>
+  <p class="sub">Try: "5k tri-fold brochures, 4/4, 100# gloss, need by Friday". Every number comes from the cost engine.</p>
+  <div id="log" aria-live="polite"></div>
+  <form id="f"><input id="m" autocomplete="off" placeholder="Describe your print job" autofocus><button>Send</button></form>
+</main>
+<script>
+  const log = document.getElementById('log'), f = document.getElementById('f'), m = document.getElementById('m');
+  let sid = null;
+  function add(text, cls) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; }
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault(); const text = m.value.trim(); if (!text) return;
+    add(text, 'me'); m.value = '';
+    try {
+      const r = await fetch('/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ message: text, session_id: sid }) });
+      const j = await r.json(); sid = j.session_id; add(j.reply, 'bot');
+    } catch (err) { add('Request failed: ' + err, 'bot'); }
+  });
+  add('Hi! Describe what you want printed and when you need it.', 'bot');
+</script>
+</body>
+</html>

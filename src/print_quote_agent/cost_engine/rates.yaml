@@ -1,0 +1,88 @@
+# Illustrative pricing for a fictional print shop. All numbers are made up.
+# In a real engagement this file is the customer's existing pricing logic,
+# exported as-is, and stays the single source of truth for every dollar amount.
+currency: USD
+
+limits:
+  min_quantity: 1
+  max_quantity: 1000000
+
+# Press sheet sizes in inches and the total unprintable margin (gripper + tail).
+sheets:
+  offset: { width: 19, height: 25, margin: 0.5 }
+  digital: { width: 12, height: 18, margin: 0.3 }
+bleed: 0.125            # per edge
+
+# Named sizes (inches, width x height) the parser may resolve.
+named_sizes:
+  letter: "8.5x11"
+  legal: "8.5x14"
+  tabloid: "11x17"
+  half-letter: "5.5x8.5"
+  postcard: "4x6"
+  business-card: "3.5x2"
+
+# Default size per product when the customer does not say.
+default_sizes:
+  flyer: "8.5x11"
+  brochure: "8.5x11"      # flat size, before folding
+  postcard: "4x6"
+  business_card: "3.5x2"
+  booklet: "8.5x11"       # finished page size
+
+# Paper cost per 1000 sheets, at each process's press-sheet size.
+papers:
+  gloss_text_80:     { label: "80# gloss text",      offset_per_1000: 70,  digital_per_1000: 38 }
+  gloss_text_100:    { label: "100# gloss text",     offset_per_1000: 88,  digital_per_1000: 48 }
+  matte_text_100:    { label: "100# matte text",     offset_per_1000: 92,  digital_per_1000: 50 }
+  uncoated_text_70:  { label: "70# uncoated text",   offset_per_1000: 55,  digital_per_1000: 30 }
+  uncoated_text_80:  { label: "80# uncoated text",   offset_per_1000: 62,  digital_per_1000: 34 }
+  gloss_cover_100:   { label: "100# gloss cover",    offset_per_1000: 140, digital_per_1000: 78 }
+  gloss_cover_130:   { label: "130# gloss cover",    offset_per_1000: 175, digital_per_1000: 98 }
+  matte_cover_100:   { label: "100# matte cover",    offset_per_1000: 148, digital_per_1000: 82 }
+  uncoated_cover_80: { label: "80# uncoated cover",  offset_per_1000: 105, digital_per_1000: 58 }
+
+# Shop-floor shorthand customers actually use.
+paper_aliases:
+  "14pt": gloss_cover_100
+  "14pt gloss": gloss_cover_100
+  "14pt matte": matte_cover_100
+  "16pt": gloss_cover_130
+  "16pt gloss": gloss_cover_130
+  "cardstock": gloss_cover_100
+
+offset:
+  plate_cost: 18.00             # per plate (one plate per ink color per side)
+  makeready_fixed: 85.00        # per press form: washup, register, color match
+  makeready_per_plate: 6.00     # per plate hung
+  waste_sheets_base: 100        # makeready spoilage per form
+  waste_sheets_per_plate: 15
+  spoilage: 0.03                # run spoilage fraction
+  run_cost_per_1000_sheets: 38.00
+  lead_business_days: 5
+
+digital:
+  setup_fee: 15.00              # file prep and RIP
+  click_color: 0.09             # per printed side, 2+ colors
+  click_bw: 0.012               # per printed side, 1 color
+  waste_sheets_base: 10
+  spoilage: 0.02
+  lead_business_days: 1
+
+finishing:
+  trim: { setup: 12.00, per_1000_pieces: 6.00 }
+  fold:
+    setup: 25.00
+    per_1000_pieces: { half: 14.00, tri: 18.00, z: 18.00 }
+  saddle_stitch:
+    setup: 35.00
+    per_1000_books: 40.00
+    per_1000_books_per_leaf: 6.00   # a leaf is one folded sheet = 4 pages
+
+# Rush surcharge: percent of (production + finishing) when the requested
+# turnaround is at or below max_business_days. First matching tier wins.
+rush:
+  - { max_business_days: 1, pct: 50 }
+  - { max_business_days: 3, pct: 25 }
+
+standard_turnaround_business_days: 10
